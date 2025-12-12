@@ -374,6 +374,62 @@
             box-shadow: var(--shadow);
             display: flex;
             flex-direction: column;
+            transition: background-color 0.2s; /* Add transition */
+        }
+
+        /* --- Color Palette & Variants --- */
+        /* Light Mode Colors */
+        .color-default { background-color: var(--note-bg) !important; }
+        .color-red { background-color: #faafa8 !important; }
+        .color-orange { background-color: #f39f76 !important; }
+        .color-yellow { background-color: #fff8b8 !important; }
+        .color-green { background-color: #e2f6d3 !important; }
+        .color-teal { background-color: #b4ddd3 !important; }
+        .color-blue { background-color: #d4e4ed !important; }
+        .color-darkblue { background-color: #aeccdc !important; }
+        .color-purple { background-color: #d3bfdb !important; }
+        .color-pink { background-color: #f6e2dd !important; }
+        .color-brown { background-color: #e9e3d4 !important; }
+        .color-gray { background-color: #efeff1 !important; }
+
+        /* Dark Mode Colors (Adjusted for readability) */
+        body.dark-mode .color-red { background-color: #5c2b29 !important; }
+        body.dark-mode .color-orange { background-color: #614a19 !important; }
+        body.dark-mode .color-yellow { background-color: #635d19 !important; }
+        body.dark-mode .color-green { background-color: #345920 !important; }
+        body.dark-mode .color-teal { background-color: #16504b !important; }
+        body.dark-mode .color-blue { background-color: #2d555e !important; }
+        body.dark-mode .color-darkblue { background-color: #1e3a5f !important; }
+        body.dark-mode .color-purple { background-color: #42275e !important; }
+        body.dark-mode .color-pink { background-color: #5b2245 !important; }
+        body.dark-mode .color-brown { background-color: #442f19 !important; }
+        body.dark-mode .color-gray { background-color: #3c3f43 !important; }
+
+        .palette-popover {
+            position: absolute;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+            border-radius: 4px;
+            padding: 8px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            z-index: 1000;
+            margin-top: 40px;
+        }
+
+        .color-option {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+        }
+        
+        .color-option:hover {
+            border-color: var(--text-primary);
+            transform: scale(1.1);
         }
 
         /* --- Breakpoints (Media Queries) --- */
@@ -471,9 +527,11 @@
                     <input type="text" class="input-title" id="noteTitle" placeholder="제목">
                     <textarea class="input-content" id="noteContent" placeholder="메모 작성..." rows="3"></textarea>
                     <div class="input-actions">
-                        <div style="display:flex;">
+                        <div style="display:flex; position: relative;">
                             <button class="icon-btn material-symbols-outlined" title="이미지 추가(기능미구현)">image</button>
-                            <button class="icon-btn material-symbols-outlined" title="색상 변경(기능미구현)">palette</button>
+                            <button class="icon-btn material-symbols-outlined" onclick="togglePalette('input')" title="색상 변경">palette</button>
+                            <!-- Palette Popover for Input -->
+                            <div id="inputPalette" class="palette-popover" style="display: none;"></div>
                         </div>
                         <button class="btn-text" onclick="addNote()">닫기</button>
                     </div>
@@ -489,10 +547,15 @@
 
     <!-- Edit Modal -->
     <div id="editModal" class="modal" onclick="closeModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content" id="modalContent" onclick="event.stopPropagation()">
             <input type="text" class="input-title" id="editTitle" placeholder="제목">
             <textarea class="input-content" id="editContent" rows="5" placeholder="내용"></textarea>
-            <div class="input-actions" style="justify-content: flex-end;">
+            <div class="input-actions" style="justify-content: space-between;">
+                <div style="display:flex; position: relative;">
+                     <button class="icon-btn material-symbols-outlined" onclick="togglePalette('modal')" title="색상 변경">palette</button>
+                     <!-- Palette Popover for Modal -->
+                     <div id="modalPalette" class="palette-popover" style="display: none; bottom: 40px;"></div>
+                </div>
                 <button class="btn-text" onclick="saveEditedNote()">저장</button>
             </div>
         </div>
@@ -508,6 +571,16 @@
         let notes = [];
         let isDarkMode = false;
         let editingNoteId = null;
+        let currentInputColor = 'default';
+        let currentEditColor = 'default';
+
+        const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'darkblue', 'purple', 'pink', 'brown', 'gray'];
+        const COLOR_HEX = {
+             // For rendering the small circles in the palette
+            'default': '#ffffff', 'red': '#faafa8', 'orange': '#f39f76', 'yellow': '#fff8b8', 
+            'green': '#e2f6d3', 'teal': '#b4ddd3', 'blue': '#d4e4ed', 'darkblue': '#aeccdc',
+            'purple': '#d3bfdb', 'pink': '#f6e2dd', 'brown': '#e9e3d4', 'gray': '#efeff1'
+        };
 
         // --- DOM Elements ---
         const notesGrid = document.getElementById('notesGrid');
@@ -537,16 +610,19 @@
             if (storedNotes) {
                 notes = JSON.parse(storedNotes);
             } else {
-                // 초기 더미 데이터 (keepdata.xlsx의 내용을 가정)
+                // 초기 더미 데이터 (색상 추가)
                 notes = [
-                    { id: 1, title: '프로젝트 아이디어', content: '반응형 웹 디자인 적용하기\n다크 모드 구현\nSPA 구조 잡기', created: Date.now() },
-                    { id: 2, title: '장보기 목록', content: '우유\n계란\n식빵\n커피 원두', created: Date.now() - 10000 },
-                    { id: 3, title: '미팅 일정', content: '월요일 오후 2시: 디자인 리뷰\n수요일 오전 10시: 개발자 회의', created: Date.now() - 20000 },
-                    { id: 4, title: '디자인 참조', content: 'Google Material Design 가이드라인 읽어보기\n색상 팔레트 결정', created: Date.now() - 30000 },
-                    { id: 5, title: 'Github 배포', content: 'index.html 파일 생성\nCommit 및 Push\nSettings > Pages 설정', created: Date.now() - 40000 }
+                    { id: 1, title: '건강상식', content: '탄수화물\n단백질\n지질', created: Date.now(), color: 'yellow' },
+                    { id: 2, title: '장보기 목록', content: '우유\n계란\n식빵\n커피 원두', created: Date.now() - 10000, color: 'blue' },
+                    { id: 3, title: '미팅 일정', content: '월요일 오후 2시: 디자인 리뷰\n수요일 오전 10시: 개발자 회의', created: Date.now() - 20000, color: 'green' },
+                    { id: 4, title: '음악', content: '그집앞\\지중해\\해운대연가\\군산항아\n색상 팔레트 결정', created: Date.now() - 30000, color: 'red' },
+                    { id: 5, title: '암의기전', content: '항암제\n췌장암\n혈액순환', created: Date.now() - 40000, color: 'default' }
                 ];
                 saveNotes(); // Save init data
             }
+            renderNotes();
+            initPalettes(); // Initialize palette UI
+        }
             renderNotes();
         }
 
@@ -618,6 +694,57 @@
             document.getElementById('noteContent').value = '';
             inputExpanded.classList.remove('active');
             inputCollapsed.style.display = 'flex';
+            
+            // Reset Color
+            currentInputColor = 'default';
+            inputWrapper.className = 'note-input-wrapper'; // Reset class
+            document.getElementById('inputPalette').style.display = 'none';
+        }
+
+        // --- Palette Logic ---
+        function initPalettes() {
+            const createPaletteItems = (type) => {
+                const container = document.getElementById(type + 'Palette');
+                container.innerHTML = '';
+                COLORS.forEach(color => {
+                    const circle = document.createElement('div');
+                    circle.className = 'color-option';
+                    circle.style.backgroundColor = COLOR_HEX[color];
+                    circle.onclick = (e) => {
+                        e.stopPropagation();
+                        selectColor(type, color);
+                    };
+                    if (color === 'default') circle.style.border = '1px solid #ddd'; // Make white visible
+                    container.appendChild(circle);
+                });
+            };
+            createPaletteItems('input');
+            createPaletteItems('modal');
+        }
+
+        function togglePalette(type) {
+            const palette = document.getElementById(type + 'Palette');
+            const isVisible = palette.style.display === 'grid';
+            // Close others
+            document.getElementById('inputPalette').style.display = 'none';
+            document.getElementById('modalPalette').style.display = 'none';
+            
+            if (!isVisible) {
+                palette.style.display = 'grid';
+            }
+        }
+
+        function selectColor(type, color) {
+            if (type === 'input') {
+                currentInputColor = color;
+                // Remove existing color classes and add new one
+                inputWrapper.className = `note-input-wrapper color-${color}`;
+            } else if (type === 'modal') {
+                currentEditColor = color;
+                const modalContent = document.getElementById('modalContent');
+                modalContent.className = `modal-content color-${color}`;
+            }
+            document.getElementById(type + 'Palette').style.display = 'none';
         }
 
         // --- CRUD Operations ---
@@ -639,6 +766,7 @@
                 id: Date.now(),
                 title: title,
                 content: content,
+                color: currentInputColor, // Save color
                 created: Date.now()
             };
 
@@ -659,7 +787,10 @@
 
             filteredNotes.forEach(note => {
                 const noteEl = document.createElement('div');
-                noteEl.className = 'note-card';
+                // Apply color class
+                const colorClass = note.color ? `color-${note.color}` : 'color-default';
+                noteEl.className = `note-card ${colorClass}`;
+                
                 noteEl.onclick = (e) => {
                     // Prevent modal opening if clicking delete button
                     if(!e.target.closest('.icon-btn')) {
@@ -692,6 +823,11 @@
             document.getElementById('editTitle').value = note.title;
             document.getElementById('editContent').value = note.content;
             
+            // Set Color
+            currentEditColor = note.color || 'default';
+            const modalContent = document.getElementById('modalContent');
+            modalContent.className = `modal-content color-${currentEditColor}`;
+
             document.getElementById('editModal').style.display = 'flex';
         }
 
@@ -704,6 +840,7 @@
                 if (index !== -1) {
                     notes[index].title = title;
                     notes[index].content = content;
+                    notes[index].color = currentEditColor; // Save edited color
                     saveNotes();
                     renderNotes();
                 }
